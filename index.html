@@ -508,6 +508,20 @@ function previewIncome() {
   document.getElementById('inc-preview').textContent=`→ Sparkonto: ${eur(spar)}`;
   CUR_INCOME=v;
 }
+function editIncome(sk, amount) {
+  const [yr, mo] = sk.split('-');
+  document.getElementById('inc-year').value  = yr;
+  document.getElementById('inc-month').value = mo;
+  document.getElementById('inc-amount').value = amount;
+  previewIncome();
+  // switch to Budget tab
+  sw('bg');
+  setTimeout(() => {
+    document.getElementById('inc-amount').focus();
+    document.getElementById('inc-save-msg').style.color = 'var(--krypto)';
+    document.getElementById('inc-save-msg').textContent = `Bearbeitungsmodus: ${MN[parseInt(mo)-1]} '${yr.slice(2)}`;
+  }, 100);
+}
 async function saveIncome() {
   const yr =document.getElementById('inc-year').value;
   const mo =document.getElementById('inc-month').value;
@@ -742,7 +756,17 @@ function rEkTbl(){
     <th>Monat</th><th style="color:#4B9EFF">2024</th><th style="color:#00CC88">2025</th><th style="color:#F5A623">2026</th>
   </tr></thead><tbody>`;
   MN.forEach((m,i)=>{
-    h+=`<tr><td>${m}</td><td class="n">${eur(inc.y24[i])}</td><td class="n">${eur(inc.y25[i])}</td><td class="n"${inc.y26[i]?' style="color:#F5A623"':''}>${eur(inc.y26[i])}</td></tr>`;
+    const skBase = String(i+1).padStart(2,'0');
+    const e24 = INCOME_ENTRIES.find(e=>e.sk===`2024-${skBase}`);
+    const e25 = INCOME_ENTRIES.find(e=>e.sk===`2025-${skBase}`);
+    const e26 = INCOME_ENTRIES.find(e=>e.sk===`2026-${skBase}`);
+    const eb = (e,yr) => e ? `<button class="icon-btn edit-btn" onclick="editIncome('${yr}-${skBase}',${e.amount})" title="Bearbeiten" style="margin-left:4px;font-size:13px">✏️</button>` : '';
+    h+=`<tr>
+      <td>${m}</td>
+      <td class="n">${eur(inc.y24[i])}${eb(e24,'2024')}</td>
+      <td class="n">${eur(inc.y25[i])}${eb(e25,'2025')}</td>
+      <td class="n"${inc.y26[i]?' style="color:#F5A623"':''}>${eur(inc.y26[i])}${eb(e26,'2026')}</td>
+    </tr>`;
   });
   h+=`</tbody><tfoot><tr>
     <td style="color:var(--mut);font-size:11px">Ø</td>
