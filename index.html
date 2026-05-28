@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nettovermögen</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Outfit:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:#07090F; --card:#0D1017; --brd:rgba(255,255,255,0.08);
+      --txt:#E2E8F0; --mut:#4A5568;
+      --acc:#00E0C4; --bank:#4B9EFF; --etf:#00CC88;
+      --krypto:#F5A623; --bar:#9B7FE8; --red:#FF6B6B;
+    }
+    body { background:var(--bg); color:var(--txt); font-family:'Outfit',sans-serif; min-height:100vh; }
+    input[type=number]  { -moz-appearance:textfield; }
+    input[type=number]::-webkit-outer-spin-button,
+    input[type=number]::-webkit-inner-spin-button { -webkit-appearance:none; }
+    select option { background:#0a0c14; }
+    ::-webkit-scrollbar { width:4px; height:4px; }
+    ::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.1); border-radius:4px; }
+
+    /* ── AUTH ── */
+    #auth-screen {
+      min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;
+      background:radial-gradient(ellipse at 50% 0%, rgba(0,224,196,0.06) 0%, transparent 60%);
+    }
+    .auth-card { background:var(--card); border:1px solid var(--brd); border-radius:20px; padding:40px 36px; width:100%; max-width:400px; }
+    .auth-logo { width:52px; height:52px; border-radius:14px; background:rgba(0,224,196,0.12); border:1px solid rgba(0,224,196,0.25); display:flex; align-items:center; justify-content:center; font-family:'Syne',sans-serif; font-size:16px; font-weight:800; color:var(--acc); margin-bottom:20px; }
+    .auth-title { font-family:'Syne',sans-serif; font-size:24px; font-weight:800; margin-bottom:4px; }
+    .auth-sub { font-size:13px; color:var(--mut); margin-bottom:28px; }
+    .auth-error { font-size:12px; color:var(--red); min-height:18px; margin-bottom:12px; text-align:center; }
+    .auth-toggle { text-align:center; margin-top:20px; font-size:13px; color:var(--mut); }
+    .auth-link { background:none; border:none; cursor:pointer; color:var(--acc); font-family:'Outfit',sans-serif; font-size:13px; font-weight:600; margin-left:4px; }
+    .auth-link:hover { text-decoration:underline; }
+
+    /* ── APP ── */
+    #app { padding:28px 32px; }
+    .wrap { max-width:1100px; margin:0 auto; }
+
+    /* Header */
+    .hdr { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:32px; flex-wrap:wrap; gap:20px; }
+    .hl .lbl { font-size:10px; letter-spacing:4px; color:var(--mut); text-transform:uppercase; margin-bottom:8px; }
+    .hl .big { font-family:'Syne',sans-serif; font-size:52px; font-weight:800; letter-spacing:-3px; line-height:1; }
+    .hl .sub { font-size:13px; color:var(--etf); margin-top:8px; }
+    .hdr-right { display:flex; flex-direction:column; align-items:flex-end; gap:10px; }
+    .gbox { background:var(--card); border:1px solid var(--brd); border-radius:12px; padding:16px 20px; min-width:240px; }
+    .gbox .lbl { font-size:10px; letter-spacing:3px; color:var(--mut); text-transform:uppercase; margin-bottom:4px; }
+    .gbox .amt { font-family:'Syne',sans-serif; font-size:24px; font-weight:700; color:var(--krypto); }
+    .pbar-bg { height:5px; background:rgba(255,255,255,0.07); border-radius:3px; margin:10px 0 6px; overflow:hidden; }
+    .pbar-fill { height:100%; border-radius:3px; background:linear-gradient(90deg,var(--etf),var(--krypto)); transition:width .6s; }
+    .gbox .pct { font-size:12px; color:var(--krypto); }
+    .signout-btn { background:none; border:1px solid var(--brd); border-radius:8px; padding:6px 14px; cursor:pointer; font-family:'Outfit',sans-serif; font-size:12px; color:var(--mut); transition:color .15s,border-color .15s; }
+    .signout-btn:hover { color:var(--txt); border-color:rgba(255,255,255,0.2); }
+
+    /* Tabs */
+    .tabs { display:flex; gap:2px; border-bottom:1px solid var(--brd); margin-bottom:24px; }
+    .tab-btn { padding:10px 20px; border:none; border-bottom:2px solid transparent; background:none; cursor:pointer; font-family:'Outfit',sans-serif; font-size:13px; font-weight:500; color:var(--mut); margin-bottom:-1px; transition:color .15s,border-color .15s; }
+    .tab-btn:hover { color:var(--txt); }
+    .tab-btn.active { color:var(--txt); border-bottom-color:var(--acc); }
+    .tab-content { display:none; }
+    .tab-content.active { display:block; }
+
+    /* Cards & Grids */
+    .card { background:var(--card); border:1px solid var(--brd); border-radius:12px; padding:20px 24px; }
+    .g3 { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:20px; }
+    .g2 { display:grid; grid-template-columns:1fr 300px; gap:12px; }
+    .g2b { display:grid; grid-template-columns:160px 1fr; gap:24px; align-items:center; }
+    .mb { margin-bottom:20px; }
+    .slabel { font-size:10px; letter-spacing:2.5px; color:var(--mut); text-transform:uppercase; margin-bottom:16px; }
+    .sc-lbl { font-size:10px; letter-spacing:2.5px; color:var(--mut); text-transform:uppercase; margin-bottom:8px; }
+    .sc-val { font-family:'Syne',sans-serif; font-size:26px; font-weight:700; letter-spacing:-1px; }
+    .sc-sub { font-size:11px; color:var(--mut); margin-top:4px; }
+    .sc-sub.g { color:var(--etf); } .sc-sub.go { color:var(--krypto); }
+
+    /* Legend */
+    .legend { display:flex; gap:18px; justify-content:center; flex-wrap:wrap; margin-top:12px; }
+    .l-item { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--mut); }
+    .ldot { width:8px; height:8px; border-radius:2px; flex-shrink:0; }
+
+    /* Alloc */
+    .alloc-row { display:flex; justify-content:space-between; align-items:center; padding:5px 0; }
+    .alloc-l { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--mut); }
+    .alloc-v { font-family:'DM Mono',monospace; font-size:12px; }
+    .alloc-p { font-size:11px; color:var(--mut); margin-left:6px; }
+
+    /* Tables */
+    .dtable { width:100%; border-collapse:collapse; font-size:12px; }
+    .dtable th { padding:10px 14px; text-align:right; color:var(--mut); font-size:10px; letter-spacing:1.5px; text-transform:uppercase; font-weight:500; border-bottom:1px solid var(--brd); white-space:nowrap; }
+    .dtable th:first-child { text-align:left; }
+    .dtable td { padding:8px 14px; text-align:right; border-bottom:1px solid rgba(255,255,255,0.04); }
+    .dtable td:first-child { text-align:left; color:var(--mut); font-size:11px; white-space:nowrap; }
+    .dtable .n { font-family:'DM Mono',monospace; font-size:11px; }
+    .dtable .tot { font-family:'DM Mono',monospace; font-size:12px; font-weight:500; }
+    .dtable tfoot td { border-top:1px solid var(--brd); padding-top:10px; font-family:'DM Mono',monospace; }
+    .pos { color:var(--etf)!important; } .neg { color:var(--red)!important; }
+    .badge { font-size:9px; background:rgba(0,224,196,0.12); color:var(--acc); border-radius:4px; padding:2px 5px; margin-left:5px; }
+    .del-btn { background:none; border:none; cursor:pointer; color:var(--mut); font-size:18px; padding:0 4px; line-height:1; transition:color .15s; }
+    .del-btn:hover { color:var(--red); }
+
+    /* Budget */
+    .wf-row { margin-bottom:14px; }
+    .wf-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:5px; }
+    .wf-nums { display:flex; gap:20px; }
+    .wf-delta { font-family:'DM Mono',monospace; font-size:13px; min-width:90px; text-align:right; }
+    .wf-rem { font-family:'DM Mono',monospace; font-size:12px; color:var(--mut); min-width:80px; text-align:right; }
+    .wf-bar-bg { height:5px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden; }
+    .wf-bar-fill { height:100%; border-radius:3px; transition:width .5s; }
+
+    /* Buttons */
+    .add-btn { background:rgba(0,224,196,0.08); border:1px solid rgba(0,224,196,0.25); border-radius:8px; padding:8px 16px; cursor:pointer; font-family:'Outfit',sans-serif; font-size:12px; font-weight:600; color:var(--acc); transition:background .15s; }
+    .add-btn:hover { background:rgba(0,224,196,0.15); }
+    .row-between { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+    .save-btn { width:100%; padding:12px; background:var(--acc); border:none; border-radius:8px; font-family:'Outfit',sans-serif; font-size:14px; font-weight:600; cursor:pointer; color:#07090F; transition:opacity .15s; }
+    .save-btn:hover { opacity:.9; }
+
+    /* Modal */
+    .modal-ov { position:fixed; inset:0; background:rgba(0,0,0,0.75); display:none; align-items:center; justify-content:center; z-index:200; padding:16px; }
+    .modal-ov.open { display:flex; }
+    .modal-box { background:#0a0c14; border:1px solid rgba(0,224,196,0.2); border-radius:16px; padding:24px 28px; width:100%; max-width:440px; max-height:90vh; overflow-y:auto; box-shadow:0 24px 60px rgba(0,0,0,0.8); }
+    .modal-hd { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+    .modal-title { font-family:'Syne',sans-serif; font-size:18px; font-weight:700; }
+    .modal-x { background:none; border:none; cursor:pointer; color:var(--mut); font-size:22px; line-height:1; transition:color .15s; }
+    .modal-x:hover { color:var(--txt); }
+
+    /* Form */
+    .fg { margin-bottom:12px; }
+    .fg2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .flbl { font-size:11px; color:var(--mut); margin-bottom:4px; display:block; }
+    .finp, .fsel { width:100%; background:rgba(255,255,255,0.05); border:1px solid var(--brd); border-radius:8px; padding:9px 12px; font-family:'DM Mono',monospace; font-size:14px; color:var(--txt); outline:none; transition:border-color .15s; }
+    .finp:focus, .fsel:focus { border-color:var(--acc); }
+    .fsel { appearance:none; -webkit-appearance:none; cursor:pointer; }
+    .fgrp-lbl { font-size:10px; letter-spacing:2.5px; text-transform:uppercase; margin:16px 0 10px; }
+    .ftot { border-top:1px solid var(--brd); margin-top:20px; padding-top:16px; display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+    .ftot-lbl { font-size:13px; color:var(--mut); }
+    .ftot-val { font-family:'Syne',sans-serif; font-size:24px; font-weight:700; }
+
+    /* Loading */
+    .loading { display:flex; align-items:center; justify-content:center; min-height:200px; color:var(--mut); font-size:13px; }
+
+    /* Responsive */
+    @media(max-width:768px){
+      #app{padding:16px;} .hl .big{font-size:36px;}
+      .g3{grid-template-columns:1fr 1fr;} .g3 .card:last-child{grid-column:span 2;}
+      .g2,.g2b{grid-template-columns:1fr;}
+    }
+    @media(max-width:480px){
+      .g3{grid-template-columns:1fr;} .g3 .card:last-child{grid-column:span 1;}
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════ AUTH SCREEN ═══════════ -->
+<div id="auth-screen">
+  <div class="auth-card">
+    <div class="auth-logo">NW</div>
+    <h1 class="auth-title">Nettovermögen</h1>
+    <p class="auth-sub" id="auth-sub">Willkommen zurück</p>
+    <div class="fg">
+      <label class="flbl">E-Mail</label>
+      <input type="email" id="a-email" class="finp" placeholder="deine@email.de" autocomplete="email" onkeydown="if(event.key==='Enter')doAuth()">
+    </div>
+    <div class="fg">
+      <label class="flbl">Passwort</label>
+      <input type="password" id="a-pass" class="finp" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doAuth()">
+    </div>
+    <p id="auth-err" class="auth-error"></p>
+    <button class="save-btn" id="auth-btn" onclick="doAuth()">Anmelden</button>
+    <p class="auth-toggle">
+      <span id="auth-toggle-txt">Noch kein Konto?</span>
+      <button class="auth-link" onclick="toggleMode()">Registrieren</button>
+    </p>
+  </div>
+</div>
+
+<!-- ═══════════ APP ═══════════ -->
+<div id="app" style="display:none">
+<div class="wrap">
+
+  <!-- HEADER -->
+  <div class="hdr">
+    <div class="hl">
+      <div class="lbl">Nettovermögen</div>
+      <div class="big" id="h-num">–</div>
+      <div class="sub" id="h-sub"></div>
+    </div>
+    <div class="hdr-right">
+      <button class="signout-btn" onclick="signOut()">Abmelden</button>
+      <div class="gbox">
+        <div class="lbl">Ziel 2026</div>
+        <div class="amt">48.000 €</div>
+        <div class="pbar-bg"><div class="pbar-fill" id="h-pbar" style="width:0%"></div></div>
+        <div class="pct" id="h-pct"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="ub"  onclick="sw('ub')">Übersicht</button>
+    <button class="tab-btn"        data-tab="vl"  onclick="sw('vl')">Verlauf</button>
+    <button class="tab-btn"        data-tab="bg"  onclick="sw('bg')">Budget</button>
+    <button class="tab-btn"        data-tab="ek"  onclick="sw('ek')">Einkommen</button>
+  </div>
+
+  <!-- TAB: ÜBERSICHT -->
+  <div id="tab-ub" class="tab-content active">
+    <div class="g3 mb" id="ub-stats"></div>
+    <div class="card mb">
+      <div class="slabel">Vermögensverlauf</div>
+      <div style="position:relative;height:240px"><canvas id="cMain"></canvas></div>
+    </div>
+    <div class="g2">
+      <div class="card">
+        <div class="slabel">Monatliche Veränderung</div>
+        <div style="position:relative;height:200px"><canvas id="cDelta"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="slabel">Aufteilung</div>
+        <div style="position:relative;height:148px;max-width:148px;margin:0 auto"><canvas id="cPie"></canvas></div>
+        <div id="alloc-list" style="margin-top:12px"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: VERLAUF -->
+  <div id="tab-vl" class="tab-content">
+    <div class="card mb">
+      <div class="slabel">Zusammensetzung nach Kategorien</div>
+      <div style="position:relative;height:260px"><canvas id="cStacked"></canvas></div>
+      <div class="legend">
+        <div class="l-item"><div class="ldot" style="background:var(--bank)"></div>Bankkonten</div>
+        <div class="l-item"><div class="ldot" style="background:var(--etf)"></div>Aktien</div>
+        <div class="l-item"><div class="ldot" style="background:var(--krypto)"></div>Krypto</div>
+        <div class="l-item"><div class="ldot" style="background:var(--bar)"></div>Bargeld</div>
+      </div>
+    </div>
+    <div class="row-between">
+      <p class="slabel" style="margin:0">Alle Einträge</p>
+      <button class="add-btn" onclick="openModal()">+ Monat hinzufügen</button>
+    </div>
+    <div class="card" style="overflow-x:auto" id="hist-wrap"></div>
+  </div>
+
+  <!-- TAB: BUDGET -->
+  <div id="tab-bg" class="tab-content">
+    <div class="g3 mb">
+      <div class="card"><div class="sc-lbl">Nettolohn</div><div class="sc-val">3.482 €</div><div class="sc-sub">Aktuell (Mai '26)</div></div>
+      <div class="card"><div class="sc-lbl">Monatl. Sparen</div><div class="sc-val">468 €</div><div class="sc-sub g">ETF + Bison + Sparkonto</div></div>
+      <div class="card"><div class="sc-lbl">Frei verfügbar</div><div class="sc-val">780 €</div><div class="sc-sub g">nach allen Abzügen</div></div>
+    </div>
+    <div class="card mb"><div class="slabel">Budgetfluss</div><div id="wf"></div></div>
+    <div class="card">
+      <div class="slabel">Mittelverwendung</div>
+      <div class="g2b">
+        <div style="position:relative;height:160px"><canvas id="cBgPie"></canvas></div>
+        <div id="bg-legend"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: EINKOMMEN -->
+  <div id="tab-ek" class="tab-content">
+    <div class="g3 mb" id="ek-stats"></div>
+    <div class="card mb">
+      <div class="slabel">Nettoeinkommen nach Jahr</div>
+      <div style="position:relative;height:280px"><canvas id="cInc"></canvas></div>
+      <div class="legend">
+        <div class="l-item"><div class="ldot" style="background:var(--bank)"></div>2024</div>
+        <div class="l-item"><div class="ldot" style="background:var(--etf)"></div>2025</div>
+        <div class="l-item"><div class="ldot" style="background:var(--krypto)"></div>2026</div>
+      </div>
+    </div>
+    <div class="card" style="overflow-x:auto" id="ek-tbl"></div>
+  </div>
+
+</div><!-- /wrap -->
+</div><!-- /app -->
+
+<!-- ═══════════ MODAL ═══════════ -->
+<div class="modal-ov" id="modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal-box">
+    <div class="modal-hd">
+      <span class="modal-title">Neuer Monatseintrag</span>
+      <button class="modal-x" onclick="closeModal()">×</button>
+    </div>
+    <div class="fg2">
+      <div class="fg">
+        <label class="flbl">Jahr</label>
+        <select id="f-year" class="fsel"><option>2025</option><option selected>2026</option><option>2027</option></select>
+      </div>
+      <div class="fg">
+        <label class="flbl">Monat</label>
+        <select id="f-month" class="fsel">
+          <option value="01">Jan</option><option value="02">Feb</option><option value="03">Mär</option>
+          <option value="04">Apr</option><option value="05">Mai</option><option value="06" selected>Jun</option>
+          <option value="07">Jul</option><option value="08">Aug</option><option value="09">Sep</option>
+          <option value="10">Okt</option><option value="11">Nov</option><option value="12">Dez</option>
+        </select>
+      </div>
+    </div>
+    <div class="fgrp-lbl" style="color:var(--bank)">Bankkonten</div>
+    <div class="fg2">
+      <div class="fg"><label class="flbl">VR Bank</label><input type="number" class="finp" id="f-vr" placeholder="0" oninput="calcTotal()"></div>
+      <div class="fg"><label class="flbl">C24</label><input type="number" class="finp" id="f-c24" placeholder="0" oninput="calcTotal()"></div>
+    </div>
+    <div class="fg"><label class="flbl">Vivid geschäftl. (optional)</label><input type="number" class="finp" id="f-vivid" placeholder="0" oninput="calcTotal()"></div>
+    <div class="fgrp-lbl" style="color:var(--etf)">Aktien</div>
+    <div class="fg"><label class="flbl">Trade Republic</label><input type="number" class="finp" id="f-aktien" placeholder="0" oninput="calcTotal()"></div>
+    <div class="fgrp-lbl" style="color:var(--krypto)">Krypto</div>
+    <div class="fg"><label class="flbl">Bison</label><input type="number" class="finp" id="f-krypto" placeholder="0" oninput="calcTotal()"></div>
+    <div class="fgrp-lbl" style="color:var(--bar)">Bargeld</div>
+    <div class="fg"><label class="flbl">Bargeld</label><input type="number" class="finp" id="f-bargeld" placeholder="0" oninput="calcTotal()"></div>
+    <div class="ftot">
+      <span class="ftot-lbl">Gesamt</span>
+      <span class="ftot-val" id="ftot-val">0 €</span>
+    </div>
+    <p id="modal-err" style="font-size:12px;color:var(--red);min-height:16px;margin-bottom:10px;text-align:center"></p>
+    <button class="save-btn" id="modal-save-btn" onclick="submitEntry()">Speichern</button>
+  </div>
+</div>
+
+<script>
+// ═══ SUPABASE ══════════════════════════════════════════════
+const SB_URL = 'https://ywcqurcbvkxveqfivaqj.supabase.co';
+const SB_KEY = 'sb_publishable_ek1bfPbJE3ktbH5XHmsBVQ__n7_NZ6l';
+const sb = supabase.createClient(SB_URL, SB_KEY);
+
+// ═══ CONSTANTS & DATA ══════════════════════════════════════
+const GOAL = 48000;
+const MN = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
+const STATIC = [
+  {m:"Nov '23",sk:"2023-11",g:12507,k:6739, a:2145,c:3173, b:450 },
+  {m:"Dez '23",sk:"2023-12",g:14667,k:8898, a:2241,c:3008, b:520 },
+  {m:"Jan '24",sk:"2024-01",g:15203,k:9780, a:2390,c:3033, b:0   },
+  {m:"Feb '24",sk:"2024-02",g:23152,k:10431,a:2501,c:4115, b:6105},
+  {m:"Mär '24",sk:"2024-03",g:17029,k:8725, a:2673,c:5001, b:630 },
+  {m:"Apr '24",sk:"2024-04",g:18241,k:10204,a:2835,c:4602, b:600 },
+  {m:"Mai '24",sk:"2024-05",g:19134,k:10551,a:2900,c:5083, b:600 },
+  {m:"Jun '24",sk:"2024-06",g:19737,k:11804,a:3010,c:4423, b:500 },
+  {m:"Jul '24",sk:"2024-07",g:21142,k:12579,a:3072,c:4991, b:500 },
+  {m:"Aug '24",sk:"2024-08",g:19333,k:11772,a:3097,c:3964, b:500 },
+  {m:"Sep '24",sk:"2024-09",g:22041,k:13564,a:3429,c:4488, b:560 },
+  {m:"Okt '24",sk:"2024-10",g:23677,k:13880,a:3721,c:5176, b:900 },
+  {m:"Nov '24",sk:"2024-11",g:25436,k:13216,a:3978,c:7177, b:1065},
+  {m:"Dez '24",sk:"2024-12",g:25524,k:13396,a:3969,c:7054, b:1105},
+  {m:"Jan '25",sk:"2025-01",g:27495,k:14768,a:4328,c:7334, b:1065},
+  {m:"Feb '25",sk:"2025-02",g:28228,k:15703,a:4433,c:6987, b:1065},
+  {m:"Mär '25",sk:"2025-03",g:26846,k:14263,a:4286,c:7192, b:1105},
+  {m:"Apr '25",sk:"2025-04",g:27874,k:13506,a:4170,c:9093, b:1105},
+  {m:"Mai '25",sk:"2025-05",g:30149,k:14158,a:4648,c:10458,b:885 },
+  {m:"Jun '25",sk:"2025-06",g:29465,k:14186,a:4673,c:9721, b:885 },
+  {m:"Jul '25",sk:"2025-07",g:38436,k:16259,a:5564,c:10728,b:5885},
+  {m:"Aug '25",sk:"2025-08",g:38569,k:15839,a:5981,c:10864,b:5885},
+  {m:"Sep '25",sk:"2025-09",g:39724,k:21049,a:6505,c:7170, b:5000},
+  {m:"Okt '25",sk:"2025-10",g:44334,k:24554,a:7108,c:7672, b:5000},
+  {m:"Nov '25",sk:"2025-11",g:44329,k:24218,a:7422,c:7689, b:5000},
+];
+const INC = {
+  months: MN,
+  y24:[3619,3049,2669,3270,3360,3919,3503,2886,2928,3237,3898,2742],
+  y25:[2868,4070,2912,2928,3091,3038,3930,2983,3148,3472,4262,null],
+  y26:[3324,3578,2934,3396,3482,null,null,null,null,null,null,null],
+};
+const BG_ROWS = [
+  {l:"Nettolohn",  v:3482, r:3482,t:"income"},
+  {l:"Haushalt",   v:-1600,r:1882,t:"expense"},
+  {l:"Taschengeld",v:-600, r:1282,t:"expense"},
+  {l:"MSCI World", v:-128, r:1154,t:"savings"},
+  {l:"IGM",        v:-34,  r:1120,t:"savings"},
+  {l:"Bison / BTC",v:-80,  r:1040,t:"savings"},
+  {l:"Sparkonto",  v:-260, r:780, t:"savings"},
+];
+
+// ═══ STATE ══════════════════════════════════════════════════
+let CURR_USER = null;
+let UE = [];     // user entries from Supabase
+let DATA = [];   // merged dataset
+
+// ═══ UTILS ══════════════════════════════════════════════════
+const eur = v => v == null ? "—" : new Intl.NumberFormat("de-DE",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(v);
+const dlt = v => v == null ? "—" : (v >= 0 ? "+" : "") + eur(v);
+const avga = a => { const v = a.filter(Boolean); return v.length ? Math.round(v.reduce((s,x)=>s+x,0)/v.length) : 0; };
+
+function build() {
+  const all = STATIC.map(d => ({...d}));
+  UE.forEach(e => {
+    const g = (+e.vr)+(+e.c24)+(+(e.vivid||0))+(+e.aktien)+(+e.krypto)+(+e.bargeld);
+    const row = { m:e.label, sk:e.sk, g, k:(+e.vr)+(+e.c24)+(+(e.vivid||0)), a:+e.aktien, c:+e.krypto, b:+e.bargeld, _u:true, _id:e.id };
+    const i = all.findIndex(d => d.sk === e.sk);
+    i >= 0 ? all[i] = row : all.push(row);
+  });
+  all.sort((a,b) => a.sk.localeCompare(b.sk));
+  all.forEach((d,i) => { d.delta = i === 0 ? null : Math.round(d.g - all[i-1].g); });
+  return all;
+}
+
+// ═══ AUTH ═══════════════════════════════════════════════════
+let authMode = 'login';
+
+function toggleMode() {
+  authMode = authMode === 'login' ? 'signup' : 'login';
+  document.getElementById('auth-sub').textContent        = authMode === 'login' ? 'Willkommen zurück' : 'Konto erstellen';
+  document.getElementById('auth-btn').textContent        = authMode === 'login' ? 'Anmelden' : 'Registrieren';
+  document.getElementById('auth-toggle-txt').textContent = authMode === 'login' ? 'Noch kein Konto?' : 'Bereits registriert?';
+  document.querySelector('.auth-link').textContent       = authMode === 'login' ? 'Registrieren' : 'Anmelden';
+  document.getElementById('auth-err').textContent = '';
+}
+
+async function doAuth() {
+  const email = document.getElementById('a-email').value.trim();
+  const pass  = document.getElementById('a-pass').value;
+  const errEl = document.getElementById('auth-err');
+  const btn   = document.getElementById('auth-btn');
+  if (!email || !pass) { errEl.textContent = 'Bitte E-Mail und Passwort eingeben.'; return; }
+  btn.textContent = '…'; btn.disabled = true; errEl.textContent = '';
+  const fn = authMode === 'login'
+    ? sb.auth.signInWithPassword({ email, password: pass })
+    : sb.auth.signUp({ email, password: pass });
+  const { data, error } = await fn;
+  btn.textContent = authMode === 'login' ? 'Anmelden' : 'Registrieren'; btn.disabled = false;
+  if (error) { errEl.textContent = error.message; return; }
+  if (authMode === 'signup' && !data.session) {
+    errEl.style.color = 'var(--etf)';
+    errEl.textContent = 'Bitte bestätige deine E-Mail, dann kannst du dich anmelden.';
+    return;
+  }
+  CURR_USER = data.user || data.session?.user;
+  await loadAndInit();
+}
+
+async function signOut() {
+  await sb.auth.signOut();
+  CURR_USER = null; UE = []; DATA = [];
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('auth-screen').style.display = 'flex';
+}
+
+// ═══ DATA LOAD ══════════════════════════════════════════════
+async function loadEntries() {
+  const { data, error } = await sb.from('entries').select('*').order('sk');
+  if (error) { console.error('Load error:', error); return []; }
+  return data || [];
+}
+
+async function loadAndInit() {
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  UE = await loadEntries();
+  DATA = build();
+  updHdr();
+  Object.keys(TINIT).forEach(k => delete TINIT[k]);
+  initTab('ub');
+}
+
+// ═══ CHART.JS SETUP ═════════════════════════════════════════
+Chart.defaults.color = "#4A5568";
+Chart.defaults.borderColor = "rgba(255,255,255,0.04)";
+Chart.defaults.font.family = "'Outfit',sans-serif";
+const TT = { backgroundColor:"#141a25", borderColor:"rgba(255,255,255,0.08)", borderWidth:1, titleColor:"#4A5568", bodyColor:"#E2E8F0", padding:10, cornerRadius:8 };
+const CH = {};
+function mkC(id, cfg) {
+  if (CH[id]) { CH[id].destroy(); delete CH[id]; }
+  const cv = document.getElementById(id);
+  if (!cv) return;
+  CH[id] = new Chart(cv.getContext('2d'), cfg);
+}
+const goalPlugin = { id:'gl', afterDraw(ch) {
+  if (!ch.scales.y) return;
+  const y = ch.scales.y.getPixelForValue(GOAL);
+  if (y < ch.chartArea.top || y > ch.chartArea.bottom) return;
+  const { ctx, chartArea:ca } = ch;
+  ctx.save();
+  ctx.strokeStyle='rgba(245,166,35,0.5)'; ctx.lineWidth=1; ctx.setLineDash([6,4]);
+  ctx.beginPath(); ctx.moveTo(ca.left,y); ctx.lineTo(ca.right,y); ctx.stroke();
+  ctx.fillStyle='rgba(245,166,35,0.75)'; ctx.font="10px 'Outfit',sans-serif";
+  ctx.textAlign='right'; ctx.fillText('Ziel 48k', ca.right-4, y-5);
+  ctx.restore();
+}};
+
+// ═══ CHARTS ═════════════════════════════════════════════════
+function iMain() {
+  mkC('cMain',{type:'line', data:{labels:DATA.map(d=>d.m), datasets:[{
+    label:'Gesamt', data:DATA.map(d=>d.g),
+    borderColor:'#00E0C4',
+    backgroundColor: ctx => { const {ctx:c,chartArea:ca}=ctx.chart; if(!ca) return 'transparent'; const g=c.createLinearGradient(0,ca.top,0,ca.bottom); g.addColorStop(0,'rgba(0,224,196,0.35)'); g.addColorStop(1,'rgba(0,224,196,0.02)'); return g; },
+    fill:true, tension:0.4, pointRadius:0, pointHoverRadius:5, pointHoverBackgroundColor:'#00E0C4', borderWidth:2.5,
+  }]},
+  options:{responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:false},tooltip:{...TT,callbacks:{label:c=>`Gesamt: ${eur(c.raw)}`}}},
+    scales:{x:{grid:{display:false},ticks:{font:{size:10},maxTicksLimit:10,maxRotation:0}},
+      y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{font:{size:10},callback:v=>`${(v/1000).toFixed(0)}k`}}}},
+  plugins:[goalPlugin]});
+}
+
+function iDelta() {
+  const dd = DATA.slice(1);
+  mkC('cDelta',{type:'bar', data:{labels:dd.map(d=>d.m), datasets:[{label:'Δ', data:dd.map(d=>d.delta),
+    backgroundColor:dd.map(d=>d.delta>=0?'rgba(0,204,136,0.75)':'rgba(255,107,107,0.75)'), borderRadius:3, borderSkipped:false}]},
+  options:{responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:false},tooltip:{...TT,callbacks:{label:c=>dlt(c.raw)}}},
+    scales:{x:{grid:{display:false},ticks:{font:{size:9},maxTicksLimit:10,maxRotation:0}},
+      y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{font:{size:10},callback:v=>`${(v/1000).toFixed(0)}k`}}}}});
+}
+
+function iPie() {
+  const lat = DATA[DATA.length-1];
+  const ac = [{n:'Bankkonten',v:lat.k,c:'#4B9EFF'},{n:'Aktien',v:lat.a,c:'#00CC88'},{n:'Krypto',v:lat.c,c:'#F5A623'},{n:'Bargeld',v:lat.b,c:'#9B7FE8'}];
+  mkC('cPie',{type:'doughnut', data:{labels:ac.map(a=>a.n), datasets:[{data:ac.map(a=>a.v), backgroundColor:ac.map(a=>a.c), borderWidth:2, borderColor:'#0D1017'}]},
+  options:{responsive:true,maintainAspectRatio:false,cutout:'66%',plugins:{legend:{display:false},tooltip:{...TT,callbacks:{label:c=>`${c.label}: ${eur(c.raw)} (${(c.raw/lat.g*100).toFixed(1)}%)`}}}}});
+  document.getElementById('alloc-list').innerHTML = ac.map(a => `
+    <div class="alloc-row">
+      <div class="alloc-l"><div class="ldot" style="background:${a.c}"></div>${a.n}</div>
+      <div><span class="alloc-v">${eur(a.v)}</span><span class="alloc-p">${(a.v/lat.g*100).toFixed(0)}%</span></div>
+    </div>`).join('');
+}
+
+function iStacked() {
+  mkC('cStacked',{type:'bar', data:{labels:DATA.map(d=>d.m), datasets:[
+    {label:'Bankkonten',data:DATA.map(d=>d.k),backgroundColor:'rgba(75,158,255,0.8)',stack:'s'},
+    {label:'Aktien',    data:DATA.map(d=>d.a),backgroundColor:'rgba(0,204,136,0.8)', stack:'s'},
+    {label:'Krypto',    data:DATA.map(d=>d.c),backgroundColor:'rgba(245,166,35,0.8)',stack:'s'},
+    {label:'Bargeld',   data:DATA.map(d=>d.b),backgroundColor:'rgba(155,127,232,0.8)',stack:'s'},
+  ]},
+  options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+    plugins:{legend:{display:false},tooltip:{...TT,displayColors:true,callbacks:{label:c=>`${c.dataset.label}: ${eur(c.raw)}`}}},
+    scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:9},maxTicksLimit:10,maxRotation:0}},
+      y:{stacked:true,grid:{color:'rgba(255,255,255,0.04)'},ticks:{font:{size:10},callback:v=>`${(v/1000).toFixed(0)}k`}}}}});
+}
+
+function iBgPie() {
+  const p = [{n:'Haushalt',v:1600,c:'#FF6B6B'},{n:'Taschengeld',v:600,c:'#FF8C42'},{n:'Sparen',v:468,c:'#4B9EFF'},{n:'Frei',v:780,c:'#00CC88'},{n:'IGM',v:34,c:'#4A5568'}];
+  mkC('cBgPie',{type:'doughnut', data:{labels:p.map(x=>x.n), datasets:[{data:p.map(x=>x.v), backgroundColor:p.map(x=>x.c), borderWidth:2, borderColor:'#0D1017'}]},
+  options:{responsive:true,maintainAspectRatio:false,cutout:'55%',plugins:{legend:{display:false},tooltip:{...TT,callbacks:{label:c=>`${c.label}: ${eur(c.raw)}`}}}}});
+  document.getElementById('bg-legend').innerHTML = p.map(x => `
+    <div class="alloc-row">
+      <div class="alloc-l"><div class="ldot" style="background:${x.c}"></div><span style="font-size:12px">${x.n}</span></div>
+      <div><span class="alloc-v">${eur(x.v)}</span><span class="alloc-p">${(x.v/3482*100).toFixed(1)}%</span></div>
+    </div>`).join('');
+}
+
+function iInc() {
+  mkC('cInc',{type:'bar', data:{labels:MN, datasets:[
+    {label:'2024',data:INC.y24,backgroundColor:'rgba(75,158,255,0.7)', borderRadius:3,borderSkipped:false},
+    {label:'2025',data:INC.y25,backgroundColor:'rgba(0,204,136,0.7)',  borderRadius:3,borderSkipped:false},
+    {label:'2026',data:INC.y26,backgroundColor:'rgba(245,166,35,0.7)', borderRadius:3,borderSkipped:false},
+  ]},
+  options:{responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:false},tooltip:{...TT,displayColors:true,callbacks:{label:c=>`${c.dataset.label}: ${eur(c.raw)}`}}},
+    scales:{x:{grid:{display:false},ticks:{font:{size:11}}},
+      y:{min:2000,grid:{color:'rgba(255,255,255,0.04)'},ticks:{font:{size:10},callback:v=>`${v}€`}}}}});
+}
+
+// ═══ RENDER ══════════════════════════════════════════════════
+function updHdr() {
+  const lat = DATA[DATA.length-1];
+  const pct = (lat.g/GOAL*100).toFixed(1);
+  document.getElementById('h-num').textContent = eur(lat.g);
+  document.getElementById('h-sub').textContent = lat.delta != null ? `${lat.delta>=0?'↑':'↓'} ${dlt(lat.delta)} im letzten Monat` : '';
+  document.getElementById('h-pbar').style.width = `${pct}%`;
+  document.getElementById('h-pct').textContent = `${pct}% erreicht · noch ${eur(GOAL-lat.g)}`;
+}
+
+function rStats() {
+  const lat = DATA[DATA.length-1], dec24 = DATA.find(d=>d.sk==='2024-12');
+  const ytd = dec24 ? Math.round(lat.g - dec24.g) : null;
+  const pct = (lat.g/GOAL*100).toFixed(1);
+  document.getElementById('ub-stats').innerHTML = `
+    <div class="card"><div class="sc-lbl">Aktuell</div><div class="sc-val">${eur(lat.g)}</div><div class="sc-sub">${lat.m} · Letzter Eintrag</div></div>
+    <div class="card"><div class="sc-lbl">Zuwachs 2025</div><div class="sc-val">${dlt(ytd)}</div><div class="sc-sub g">${dec24?`+${((ytd/dec24.g)*100).toFixed(1)}% seit Dez '24`:''}</div></div>
+    <div class="card"><div class="sc-lbl">Ziel 2026</div><div class="sc-val">${eur(GOAL)}</div><div class="sc-sub go">${pct}% erreicht · noch ${eur(GOAL-lat.g)}</div></div>`;
+}
+
+function rHist() {
+  let h = `<table class="dtable"><thead><tr>
+    <th>Datum</th><th>Bankkonten</th><th>Aktien</th><th>Krypto</th><th>Bargeld</th><th>Gesamt</th><th>Δ</th><th></th>
+  </tr></thead><tbody>`;
+  [...DATA].reverse().forEach(d => {
+    const dc = d.delta==null?'':d.delta>=0?'pos':'neg';
+    h += `<tr>
+      <td>${d.m}${d._u?`<span class="badge">neu</span>`:''}</td>
+      <td class="n">${eur(d.k)}</td><td class="n">${eur(d.a)}</td>
+      <td class="n">${eur(d.c)}</td><td class="n">${eur(d.b)}</td>
+      <td class="tot">${eur(d.g)}</td>
+      <td class="n ${dc}">${dlt(d.delta)}</td>
+      <td>${d._u?`<button class="del-btn" onclick="delEntry('${d._id}')" title="Löschen">×</button>`:''}</td>
+    </tr>`;
+  });
+  h += '</tbody></table>';
+  document.getElementById('hist-wrap').innerHTML = h;
+}
+
+function rBg() {
+  document.getElementById('wf').innerHTML = BG_ROWS.map(row => {
+    const c = row.t==='income'?'#00CC88':row.t==='savings'?'#4B9EFF':'#FF6B6B';
+    return `<div class="wf-row">
+      <div class="wf-head">
+        <span style="font-size:13px;color:${row.t==='income'?'#00CC88':'var(--txt)'};font-weight:${row.t==='income'?600:400}">${row.l}</span>
+        <div class="wf-nums">
+          <span class="wf-delta" style="color:${row.v>0?'#00CC88':'#FF6B6B'}">${row.v>0?'+':''}${eur(row.v)}</span>
+          <span class="wf-rem">= ${eur(row.r)}</span>
+        </div>
+      </div>
+      <div class="wf-bar-bg"><div class="wf-bar-fill" style="width:${(row.r/3482*100).toFixed(1)}%;background:linear-gradient(90deg,${c},${c}99)"></div></div>
+    </div>`;}).join('');
+}
+
+function rEkStats() {
+  document.getElementById('ek-stats').innerHTML = `
+    <div class="card"><div class="sc-lbl">Ø 2024</div><div class="sc-val">${eur(avga(INC.y24))}</div><div class="sc-sub">Gesamt: ${eur(INC.y24.reduce((a,b)=>a+b,0))}</div></div>
+    <div class="card"><div class="sc-lbl">Ø 2025</div><div class="sc-val">${eur(avga(INC.y25))}</div><div class="sc-sub g">11 Monate erfasst</div></div>
+    <div class="card"><div class="sc-lbl">Ø 2026</div><div class="sc-val">${eur(avga(INC.y26))}</div><div class="sc-sub go">5 Monate erfasst</div></div>`;
+}
+
+function rEkTbl() {
+  let h = `<table class="dtable"><thead><tr>
+    <th>Monat</th><th style="color:#4B9EFF">2024</th><th style="color:#00CC88">2025</th><th style="color:#F5A623">2026</th>
+  </tr></thead><tbody>`;
+  MN.forEach((m,i) => {
+    h += `<tr><td>${m}</td><td class="n">${eur(INC.y24[i])}</td><td class="n">${eur(INC.y25[i])}</td><td class="n"${INC.y26[i]?' style="color:#F5A623"':''}>${eur(INC.y26[i])}</td></tr>`;
+  });
+  h += `</tbody><tfoot><tr>
+    <td style="color:var(--mut);font-size:11px">Ø</td>
+    <td style="color:#4B9EFF">${eur(avga(INC.y24))}</td>
+    <td style="color:#00CC88">${eur(avga(INC.y25))}</td>
+    <td style="color:#F5A623">${eur(avga(INC.y26))}</td>
+  </tr></tfoot></table>`;
+  document.getElementById('ek-tbl').innerHTML = h;
+}
+
+// ═══ TABS ═══════════════════════════════════════════════════
+let CUR = 'ub';
+const TINIT = {};
+function sw(t) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab===t));
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-'+t).classList.add('active');
+  CUR = t; updHdr();
+  setTimeout(() => initTab(t, false), 50);
+}
+function initTab(t, force=true) {
+  if (!force && TINIT[t]) return; TINIT[t] = true;
+  if (t==='ub') { rStats(); iMain(); iDelta(); iPie(); }
+  if (t==='vl') { iStacked(); rHist(); }
+  if (t==='bg') { rBg(); iBgPie(); }
+  if (t==='ek') { rEkStats(); iInc(); rEkTbl(); }
+}
+function refresh() { TINIT[CUR] = false; setTimeout(() => initTab(CUR), 50); updHdr(); }
+
+// ═══ MODAL ══════════════════════════════════════════════════
+function openModal() { document.getElementById('modal').classList.add('open'); calcTotal(); }
+function closeModal() {
+  document.getElementById('modal').classList.remove('open');
+  document.getElementById('modal-err').textContent = '';
+  ['f-vr','f-c24','f-vivid','f-aktien','f-krypto','f-bargeld'].forEach(id => document.getElementById(id).value='');
+  calcTotal();
+}
+function calcTotal() {
+  const v = ['f-vr','f-c24','f-vivid','f-aktien','f-krypto','f-bargeld'].reduce((s,id) => s+(parseFloat(document.getElementById(id).value)||0), 0);
+  document.getElementById('ftot-val').textContent = eur(v);
+}
+
+async function submitEntry() {
+  const yr  = document.getElementById('f-year').value;
+  const mo  = document.getElementById('f-month').value;
+  const sk  = `${yr}-${mo}`;
+  const lbl = `${MN[parseInt(mo)-1]} '${yr.slice(2)}`;
+  const btn = document.getElementById('modal-save-btn');
+  const err = document.getElementById('modal-err');
+  const entry = {
+    user_id: CURR_USER.id, sk, label: lbl,
+    vr:      parseFloat(document.getElementById('f-vr').value)||0,
+    c24:     parseFloat(document.getElementById('f-c24').value)||0,
+    vivid:   parseFloat(document.getElementById('f-vivid').value)||0,
+    aktien:  parseFloat(document.getElementById('f-aktien').value)||0,
+    krypto:  parseFloat(document.getElementById('f-krypto').value)||0,
+    bargeld: parseFloat(document.getElementById('f-bargeld').value)||0,
+  };
+  btn.textContent = '…'; btn.disabled = true; err.textContent = '';
+  const { error } = await sb.from('entries').upsert(entry, { onConflict: 'user_id,sk' });
+  btn.textContent = 'Speichern'; btn.disabled = false;
+  if (error) { err.textContent = error.message; return; }
+  UE = await loadEntries();
+  DATA = build();
+  closeModal();
+  TINIT['ub'] = false;
+  refresh();
+}
+
+async function delEntry(id) {
+  if (!confirm('Eintrag löschen?')) return;
+  const { error } = await sb.from('entries').delete().eq('id', id);
+  if (error) { alert(error.message); return; }
+  UE = await loadEntries();
+  DATA = build();
+  TINIT['ub'] = false;
+  refresh();
+}
+
+// ═══ STARTUP ════════════════════════════════════════════════
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) {
+    CURR_USER = session.user;
+    await loadAndInit();
+  }
+  sb.auth.onAuthStateChange((_event, session) => {
+    if (!session && document.getElementById('app').style.display !== 'none') signOut();
+  });
+})();
+</script>
+</body>
+</html>
