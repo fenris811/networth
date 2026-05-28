@@ -381,7 +381,7 @@ const INC = {
 let CURR_USER = null;
 let UE = [];
 let DATA = [];
-let BUDGET = { nettolohn:3482, haushalt:1600, taschengeld:600, msci:128, igm:34, bison:80, sparkonto:260 };
+let BUDGET = { nettolohn:3482, haushalt:1600, taschengeld:600, msci:128, igm:34, bison:80 };
 let editingId = null; // null = new, string = edit mode
 
 // ═══ UTILS ════════════════════════════════════════════
@@ -391,16 +391,15 @@ const avga = a => { const v=a.filter(Boolean); return v.length?Math.round(v.redu
 
 function calcBudgetRows() {
   const B = BUDGET;
-  const frei = B.nettolohn - B.haushalt - B.taschengeld - B.msci - B.igm - B.bison - B.sparkonto;
-  const sparTotal = B.sparkonto + frei;
+  const spar = B.nettolohn - B.haushalt - B.taschengeld - B.msci - B.igm - B.bison;
   return [
-    {l:"Nettolohn",             v: B.nettolohn,  r:B.nettolohn,                                                    t:"income"},
-    {l:"Haushaltskonto",        v:-B.haushalt,   r:B.nettolohn-B.haushalt,                                          t:"expense"},
-    {l:"Taschengeld",           v:-B.taschengeld,r:B.nettolohn-B.haushalt-B.taschengeld,                            t:"expense"},
-    {l:"MSCI World",            v:-B.msci,       r:B.nettolohn-B.haushalt-B.taschengeld-B.msci,                     t:"savings"},
-    {l:"IGM",                   v:-B.igm,        r:B.nettolohn-B.haushalt-B.taschengeld-B.msci-B.igm,              t:"savings"},
-    {l:"Bison / BTC",           v:-B.bison,      r:B.nettolohn-B.haushalt-B.taschengeld-B.msci-B.igm-B.bison,      t:"savings"},
-    {l:`Sparkonto (inkl. Frei)`,v:-sparTotal,    r:0,                                                               t:"savings", sub:`${eur(B.sparkonto)} fix + ${eur(frei)} frei`},
+    {l:"Nettolohn",      v: B.nettolohn,   r:B.nettolohn,                                                 t:"income"},
+    {l:"Haushaltskonto", v:-B.haushalt,    r:B.nettolohn-B.haushalt,                                       t:"expense"},
+    {l:"Taschengeld",    v:-B.taschengeld, r:B.nettolohn-B.haushalt-B.taschengeld,                         t:"expense"},
+    {l:"MSCI World ETF", v:-B.msci,        r:B.nettolohn-B.haushalt-B.taschengeld-B.msci,                  t:"savings"},
+    {l:"IGM-Beitrag",    v:-B.igm,         r:B.nettolohn-B.haushalt-B.taschengeld-B.msci-B.igm,            t:"savings"},
+    {l:"Bison / BTC",    v:-B.bison,       r:B.nettolohn-B.haushalt-B.taschengeld-B.msci-B.igm-B.bison,    t:"savings"},
+    {l:"Sparkonto",      v:-spar,          r:0,                                                             t:"savings", result:true},
   ];
 }
 
@@ -466,7 +465,7 @@ async function loadBudget() {
   if(data&&data.length) BUDGET={
     nettolohn:+data[0].nettolohn, haushalt:+data[0].haushalt,
     taschengeld:+data[0].taschengeld, msci:+data[0].msci,
-    igm:+data[0].igm, bison:+data[0].bison, sparkonto:+data[0].sparkonto,
+    igm:+data[0].igm, bison:+data[0].bison,
   };
 }
 async function loadAndInit() {
@@ -481,7 +480,7 @@ async function loadAndInit() {
 
 // ═══ BUDGET SAVE ══════════════════════════════════════
 async function saveBudget() {
-  const keys=['nettolohn','haushalt','taschengeld','msci','igm','bison','sparkonto'];
+  const keys=['nettolohn','haushalt','taschengeld','msci','igm','bison'];
   keys.forEach(k=>{ BUDGET[k]=parseFloat(document.getElementById('binp-'+k).value)||0; });
   const {error}=await sb.from('budget').upsert({user_id:CURR_USER.id,...BUDGET},{onConflict:'user_id'});
   const msg=document.getElementById('bg-save-msg');
@@ -559,14 +558,14 @@ function iStacked(){
 }
 function iBgPie(){
   const B=BUDGET;
-  const frei=B.nettolohn-B.haushalt-B.taschengeld-B.msci-B.igm-B.bison-B.sparkonto;
+  const spar2=B.nettolohn-B.haushalt-B.taschengeld-B.msci-B.igm-B.bison;
   const p=[
     {n:'Haushaltskonto',v:B.haushalt,   c:'#FF6B6B'},
     {n:'Taschengeld',   v:B.taschengeld,c:'#FF8C42'},
-    {n:'ETF/Aktien',    v:B.msci,       c:'#4B9EFF'},
-    {n:'IGM',           v:B.igm,        c:'#4A5568'},
+    {n:'MSCI World ETF',v:B.msci,       c:'#4B9EFF'},
+    {n:'IGM-Beitrag',   v:B.igm,        c:'#4A5568'},
     {n:'Bison/BTC',     v:B.bison,      c:'#F5A623'},
-    {n:'Sparkonto',     v:B.sparkonto+frei,c:'#00CC88'},
+    {n:'Sparkonto',     v:spar2,        c:'#00CC88'},
   ];
   mkC('cBgPie',{type:'doughnut',data:{labels:p.map(x=>x.n),datasets:[{data:p.map(x=>x.v),backgroundColor:p.map(x=>x.c),borderWidth:2,borderColor:'#0D1017'}]},
   options:{responsive:true,maintainAspectRatio:false,cutout:'55%',plugins:{legend:{display:false},tooltip:{...TT,callbacks:{label:c=>`${c.label}: ${eur(c.raw)}`}}}}});
@@ -632,9 +631,10 @@ function rBg(){
   const frei=B.nettolohn-B.haushalt-B.taschengeld-B.msci-B.igm-B.bison-B.sparkonto;
   const sparTotal=B.sparkonto+frei;
   // KPI cards
+  const spar = B.nettolohn - B.haushalt - B.taschengeld - B.msci - B.igm - B.bison;
   document.getElementById('bg-stats').innerHTML=`
     <div class="card"><div class="sc-lbl">Nettolohn</div><div class="sc-val">${eur(B.nettolohn)}</div><div class="sc-sub">Aktuell</div></div>
-    <div class="card"><div class="sc-lbl">Monatl. Sparen</div><div class="sc-val">${eur(B.msci+B.igm+B.bison+sparTotal)}</div><div class="sc-sub g">ETF + IGM + Bison + Sparkonto</div></div>
+    <div class="card"><div class="sc-lbl">Monatl. Sparen</div><div class="sc-val">${eur(B.msci+B.igm+B.bison+spar)}</div><div class="sc-sub g">ETF + IGM + Bison + Sparkonto</div></div>
     <div class="card"><div class="sc-lbl">Ausgaben</div><div class="sc-val">${eur(B.haushalt+B.taschengeld)}</div><div class="sc-sub">Haushalt + Taschengeld</div></div>`;
   // Waterfall
   const rows=calcBudgetRows();
@@ -648,11 +648,11 @@ function rBg(){
           <span class="wf-rem">= ${eur(row.r)}</span>
         </div>
       </div>
-      ${row.sub?`<p style="font-size:10px;color:var(--mut);margin-bottom:4px;text-align:right">${row.sub}</p>`:''}
+      ${row.result?`<p style="font-size:11px;color:var(--etf);font-weight:600;text-align:right;margin-bottom:4px">= ${eur(Math.abs(row.v))} → Sparkonto</p>`:''}
       <div class="wf-bar-bg"><div class="wf-bar-fill" style="width:${(Math.max(0,row.r)/B.nettolohn*100).toFixed(1)}%;background:linear-gradient(90deg,${c},${c}99)"></div></div>
     </div>`;}).join('');
   // Edit form
-  const labels={nettolohn:'Nettolohn',haushalt:'Haushaltskonto',taschengeld:'Taschengeld',msci:'MSCI World ETF',igm:'IGM',bison:'Bison / BTC',sparkonto:'Sparkonto (Basis)'};
+  const labels={nettolohn:'Nettolohn',haushalt:'Haushaltskonto',taschengeld:'Taschengeld',msci:'MSCI World ETF',igm:'IGM-Beitrag',bison:'Bison / BTC'};
   document.getElementById('bg-edit-form').innerHTML=Object.entries(labels).map(([k,l])=>`
     <div class="bg-edit-row">
       <span class="bg-edit-lbl">${l}</span>
