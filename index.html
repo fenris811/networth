@@ -257,9 +257,34 @@
       </div>
       <!-- Edit -->
       <div class="card">
-        <div class="slabel">Bearbeiten</div>
+        <div class="slabel">Nettolohn eintragen</div>
+        <div class="fg2" style="margin-bottom:12px">
+          <div class="fg">
+            <label class="flbl">Jahr</label>
+            <select id="inc-year" class="fsel"><option>2025</option><option selected>2026</option><option>2027</option></select>
+          </div>
+          <div class="fg">
+            <label class="flbl">Monat</label>
+            <select id="inc-month" class="fsel">
+              <option value="01">Jan</option><option value="02">Feb</option><option value="03">Mär</option>
+              <option value="04">Apr</option><option value="05" selected>Mai</option><option value="06">Jun</option>
+              <option value="07">Jul</option><option value="08">Aug</option><option value="09">Sep</option>
+              <option value="10">Okt</option><option value="11">Nov</option><option value="12">Dez</option>
+            </select>
+          </div>
+        </div>
+        <div class="fg">
+          <label class="flbl">Nettolohn (€)</label>
+          <input type="number" class="finp" id="inc-amount" placeholder="3482" oninput="previewIncome()">
+        </div>
+        <p id="inc-preview" style="font-size:12px;color:var(--mut);margin:6px 0 12px;min-height:16px"></p>
+        <button class="bg-save-btn" onclick="saveIncome()" style="margin-top:0">Speichern &amp; Berechnen</button>
+        <p id="inc-save-msg" style="font-size:12px;color:var(--etf);margin-top:8px;min-height:16px"></p>
+
+        <div style="border-top:1px solid var(--brd);margin:20px 0 16px"></div>
+        <div class="slabel">Fixe Abzüge</div>
         <div id="bg-edit-form"></div>
-        <button class="bg-save-btn" onclick="saveBudget()">Speichern</button>
+        <button class="bg-save-btn" onclick="saveBudget()" style="margin-top:16px">Abzüge speichern</button>
         <p id="bg-save-msg" style="font-size:12px;color:var(--etf);margin-top:8px;min-height:16px"></p>
       </div>
     </div>
@@ -381,7 +406,9 @@ const INC = {
 let CURR_USER = null;
 let UE = [];
 let DATA = [];
-let BUDGET = { nettolohn:3482, haushalt:1600, taschengeld:600, msci:128, igm:34, bison:80 };
+let BUDGET = { haushalt:1600, taschengeld:600, msci:128, igm:34, bison:80 };
+let INCOME_ENTRIES = []; // {sk, amount} from supabase
+let CUR_INCOME = 3482; // current month nettolohn for waterfall
 let editingId = null; // null = new, string = edit mode
 
 // ═══ UTILS ════════════════════════════════════════════
@@ -391,15 +418,15 @@ const avga = a => { const v=a.filter(Boolean); return v.length?Math.round(v.redu
 
 function calcBudgetRows() {
   const B = BUDGET;
-  const spar = B.nettolohn - B.haushalt - B.taschengeld - B.msci - B.igm - B.bison;
+  const spar = CUR_INCOME - B.haushalt - B.taschengeld - B.msci - B.igm - B.bison;
   return [
-    {l:"Nettolohn",      v: B.nettolohn,   r:B.nettolohn,                                                 t:"income"},
-    {l:"Haushaltskonto", v:-B.haushalt,    r:B.nettolohn-B.haushalt,                                       t:"expense"},
-    {l:"Taschengeld",    v:-B.taschengeld, r:B.nettolohn-B.haushalt-B.taschengeld,                         t:"expense"},
-    {l:"MSCI World ETF", v:-B.msci,        r:B.nettolohn-B.haushalt-B.taschengeld-B.msci,                  t:"savings"},
-    {l:"IGM-Beitrag",    v:-B.igm,         r:B.nettolohn-B.haushalt-B.taschengeld-B.msci-B.igm,            t:"savings"},
-    {l:"Bison / BTC",    v:-B.bison,       r:B.nettolohn-B.haushalt-B.taschengeld-B.msci-B.igm-B.bison,    t:"savings"},
-    {l:"Sparkonto",      v:-spar,          r:0,                                                             t:"savings", result:true},
+    {l:"Nettolohn",      v: CUR_INCOME,    r:CUR_INCOME,                                                  t:"income"},
+    {l:"Haushaltskonto", v:-B.haushalt,    r:CUR_INCOME-B.haushalt,                                         t:"expense"},
+    {l:"Taschengeld",    v:-B.taschengeld, r:CUR_INCOME-B.haushalt-B.taschengeld,                           t:"expense"},
+    {l:"MSCI World ETF", v:-B.msci,        r:CUR_INCOME-B.haushalt-B.taschengeld-B.msci,                    t:"savings"},
+    {l:"IGM-Beitrag",    v:-B.igm,         r:CUR_INCOME-B.haushalt-B.taschengeld-B.msci-B.igm,              t:"savings"},
+    {l:"Bison / BTC",    v:-B.bison,       r:CUR_INCOME-B.haushalt-B.taschengeld-B.msci-B.igm-B.bison,      t:"savings"},
+    {l:"Sparkonto",      v:-spar,          r:0,                                                              t:"savings", result:true},
   ];
 }
 
@@ -463,15 +490,44 @@ async function loadEntries() {
 async function loadBudget() {
   const {data}=await sb.from('budget').select('*').limit(1);
   if(data&&data.length) BUDGET={
-    nettolohn:+data[0].nettolohn, haushalt:+data[0].haushalt,
-    taschengeld:+data[0].taschengeld, msci:+data[0].msci,
-    igm:+data[0].igm, bison:+data[0].bison,
+    haushalt:+data[0].haushalt, taschengeld:+data[0].taschengeld,
+    msci:+data[0].msci, igm:+data[0].igm, bison:+data[0].bison,
   };
+}
+async function loadIncomeEntries() {
+  const {data}=await sb.from('income').select('*').order('sk');
+  if(data) INCOME_ENTRIES=data;
+  // set CUR_INCOME to most recent entry
+  if(INCOME_ENTRIES.length) CUR_INCOME=+INCOME_ENTRIES[INCOME_ENTRIES.length-1].amount;
+}
+function previewIncome() {
+  const v=parseFloat(document.getElementById('inc-amount').value)||0;
+  if(!v){document.getElementById('inc-preview').textContent='';return;}
+  const B=BUDGET;
+  const spar=v-B.haushalt-B.taschengeld-B.msci-B.igm-B.bison;
+  document.getElementById('inc-preview').textContent=`→ Sparkonto: ${eur(spar)}`;
+  CUR_INCOME=v;
+}
+async function saveIncome() {
+  const yr =document.getElementById('inc-year').value;
+  const mo =document.getElementById('inc-month').value;
+  const amt=parseFloat(document.getElementById('inc-amount').value)||0;
+  if(!amt){document.getElementById('inc-save-msg').textContent='Bitte Betrag eingeben.';return;}
+  const sk=`${yr}-${mo}`;
+  const msg=document.getElementById('inc-save-msg');
+  msg.textContent='…';
+  const{error}=await sb.from('income').upsert({user_id:CURR_USER.id,sk,amount:amt},{onConflict:'user_id,sk'});
+  if(error){msg.style.color='var(--red)';msg.textContent=error.message;return;}
+  CUR_INCOME=amt;
+  await loadIncomeEntries();
+  msg.style.color='var(--etf)'; msg.textContent='✓ Gespeichert';
+  setTimeout(()=>msg.textContent='',2000);
+  TINIT['bg']=false; TINIT['ek']=false; initTab('bg',true);
 }
 async function loadAndInit() {
   document.getElementById('auth-screen').style.display='none';
   document.getElementById('app').style.display='block';
-  await Promise.all([loadEntries().then(d=>UE=d), loadBudget()]);
+  await Promise.all([loadEntries().then(d=>UE=d), loadBudget(), loadIncomeEntries()]);
   DATA=build();
   updHdr();
   Object.keys(TINIT).forEach(k=>delete TINIT[k]);
@@ -480,7 +536,7 @@ async function loadAndInit() {
 
 // ═══ BUDGET SAVE ══════════════════════════════════════
 async function saveBudget() {
-  const keys=['nettolohn','haushalt','taschengeld','msci','igm','bison'];
+  const keys=['haushalt','taschengeld','msci','igm','bison'];
   keys.forEach(k=>{ BUDGET[k]=parseFloat(document.getElementById('binp-'+k).value)||0; });
   const {error}=await sb.from('budget').upsert({user_id:CURR_USER.id,...BUDGET},{onConflict:'user_id'});
   const msg=document.getElementById('bg-save-msg');
@@ -558,7 +614,7 @@ function iStacked(){
 }
 function iBgPie(){
   const B=BUDGET;
-  const spar2=B.nettolohn-B.haushalt-B.taschengeld-B.msci-B.igm-B.bison;
+  const spar2=CUR_INCOME-B.haushalt-B.taschengeld-B.msci-B.igm-B.bison;
   const p=[
     {n:'Haushaltskonto',v:B.haushalt,   c:'#FF6B6B'},
     {n:'Taschengeld',   v:B.taschengeld,c:'#FF8C42'},
@@ -572,14 +628,15 @@ function iBgPie(){
   document.getElementById('bg-legend').innerHTML=p.map(x=>`
     <div class="alloc-row">
       <div class="alloc-l"><div class="ldot" style="background:${x.c}"></div><span style="font-size:12px">${x.n}</span></div>
-      <div><span class="alloc-v">${eur(x.v)}</span><span class="alloc-p">${(x.v/B.nettolohn*100).toFixed(1)}%</span></div>
+      <div><span class="alloc-v">${eur(x.v)}</span><span class="alloc-p">${(x.v/CUR_INCOME*100).toFixed(1)}%</span></div>
     </div>`).join('');
 }
 function iInc(){
+  const inc=getMergedIncome();
   mkC('cInc',{type:'bar',data:{labels:MN,datasets:[
-    {label:'2024',data:INC.y24,backgroundColor:'rgba(75,158,255,0.7)', borderRadius:3,borderSkipped:false},
-    {label:'2025',data:INC.y25,backgroundColor:'rgba(0,204,136,0.7)',  borderRadius:3,borderSkipped:false},
-    {label:'2026',data:INC.y26,backgroundColor:'rgba(245,166,35,0.7)', borderRadius:3,borderSkipped:false},
+    {label:'2024',data:inc.y24,backgroundColor:'rgba(75,158,255,0.7)', borderRadius:3,borderSkipped:false},
+    {label:'2025',data:inc.y25,backgroundColor:'rgba(0,204,136,0.7)',  borderRadius:3,borderSkipped:false},
+    {label:'2026',data:inc.y26,backgroundColor:'rgba(245,166,35,0.7)', borderRadius:3,borderSkipped:false},
   ]},
   options:{responsive:true,maintainAspectRatio:false,
     plugins:{legend:{display:false},tooltip:{...TT,displayColors:true,callbacks:{label:c=>`${c.dataset.label}: ${eur(c.raw)}`}}},
@@ -631,9 +688,9 @@ function rBg(){
   const frei=B.nettolohn-B.haushalt-B.taschengeld-B.msci-B.igm-B.bison-B.sparkonto;
   const sparTotal=B.sparkonto+frei;
   // KPI cards
-  const spar = B.nettolohn - B.haushalt - B.taschengeld - B.msci - B.igm - B.bison;
+  const spar = CUR_INCOME - B.haushalt - B.taschengeld - B.msci - B.igm - B.bison;
   document.getElementById('bg-stats').innerHTML=`
-    <div class="card"><div class="sc-lbl">Nettolohn</div><div class="sc-val">${eur(B.nettolohn)}</div><div class="sc-sub">Aktuell</div></div>
+    <div class="card"><div class="sc-lbl">Nettolohn</div><div class="sc-val">${eur(CUR_INCOME)}</div><div class="sc-sub">Aktueller Monat</div></div>
     <div class="card"><div class="sc-lbl">Monatl. Sparen</div><div class="sc-val">${eur(B.msci+B.igm+B.bison+spar)}</div><div class="sc-sub g">ETF + IGM + Bison + Sparkonto</div></div>
     <div class="card"><div class="sc-lbl">Ausgaben</div><div class="sc-val">${eur(B.haushalt+B.taschengeld)}</div><div class="sc-sub">Haushalt + Taschengeld</div></div>`;
   // Waterfall
@@ -649,7 +706,7 @@ function rBg(){
         </div>
       </div>
       ${row.result?`<p style="font-size:11px;color:var(--etf);font-weight:600;text-align:right;margin-bottom:4px">= ${eur(Math.abs(row.v))} → Sparkonto</p>`:''}
-      <div class="wf-bar-bg"><div class="wf-bar-fill" style="width:${(Math.max(0,row.r)/B.nettolohn*100).toFixed(1)}%;background:linear-gradient(90deg,${c},${c}99)"></div></div>
+      <div class="wf-bar-bg"><div class="wf-bar-fill" style="width:${(Math.max(0,row.r)/CUR_INCOME*100).toFixed(1)}%;background:linear-gradient(90deg,${c},${c}99)"></div></div>
     </div>`;}).join('');
   // Edit form
   const labels={nettolohn:'Nettolohn',haushalt:'Haushaltskonto',taschengeld:'Taschengeld',msci:'MSCI World ETF',igm:'IGM-Beitrag',bison:'Bison / BTC'};
@@ -659,24 +716,39 @@ function rBg(){
       <input type="number" class="bg-edit-inp" id="binp-${k}" value="${BUDGET[k]}">
     </div>`).join('');
 }
+function getMergedIncome() {
+  // Start with static INC data, override/add from INCOME_ENTRIES
+  const y24=[...INC.y24], y25=[...INC.y25], y26=[...INC.y26];
+  INCOME_ENTRIES.forEach(e=>{
+    const [yr,mo]=e.sk.split('-');
+    const mi=parseInt(mo)-1;
+    if(yr==='2024') y24[mi]=+e.amount;
+    else if(yr==='2025') y25[mi]=+e.amount;
+    else if(yr==='2026') y26[mi]=+e.amount;
+  });
+  return {y24,y25,y26};
+}
 function rEkStats(){
+  const inc=getMergedIncome();
+  const cnt26=inc.y26.filter(Boolean).length;
   document.getElementById('ek-stats').innerHTML=`
-    <div class="card"><div class="sc-lbl">Ø 2024</div><div class="sc-val">${eur(avga(INC.y24))}</div><div class="sc-sub">Gesamt: ${eur(INC.y24.reduce((a,b)=>a+b,0))}</div></div>
-    <div class="card"><div class="sc-lbl">Ø 2025</div><div class="sc-val">${eur(avga(INC.y25))}</div><div class="sc-sub g">11 Monate erfasst</div></div>
-    <div class="card"><div class="sc-lbl">Ø 2026</div><div class="sc-val">${eur(avga(INC.y26))}</div><div class="sc-sub go">5 Monate erfasst</div></div>`;
+    <div class="card"><div class="sc-lbl">Ø 2024</div><div class="sc-val">${eur(avga(inc.y24))}</div><div class="sc-sub">Gesamt: ${eur(inc.y24.reduce((a,b)=>a+b,0))}</div></div>
+    <div class="card"><div class="sc-lbl">Ø 2025</div><div class="sc-val">${eur(avga(inc.y25))}</div><div class="sc-sub g">${inc.y25.filter(Boolean).length} Monate erfasst</div></div>
+    <div class="card"><div class="sc-lbl">Ø 2026</div><div class="sc-val">${eur(avga(inc.y26))}</div><div class="sc-sub go">${cnt26} Monate erfasst</div></div>`;
 }
 function rEkTbl(){
+  const inc=getMergedIncome();
   let h=`<table class="dtable"><thead><tr>
     <th>Monat</th><th style="color:#4B9EFF">2024</th><th style="color:#00CC88">2025</th><th style="color:#F5A623">2026</th>
   </tr></thead><tbody>`;
   MN.forEach((m,i)=>{
-    h+=`<tr><td>${m}</td><td class="n">${eur(INC.y24[i])}</td><td class="n">${eur(INC.y25[i])}</td><td class="n"${INC.y26[i]?' style="color:#F5A623"':''}>${eur(INC.y26[i])}</td></tr>`;
+    h+=`<tr><td>${m}</td><td class="n">${eur(inc.y24[i])}</td><td class="n">${eur(inc.y25[i])}</td><td class="n"${inc.y26[i]?' style="color:#F5A623"':''}>${eur(inc.y26[i])}</td></tr>`;
   });
   h+=`</tbody><tfoot><tr>
     <td style="color:var(--mut);font-size:11px">Ø</td>
-    <td style="color:#4B9EFF">${eur(avga(INC.y24))}</td>
-    <td style="color:#00CC88">${eur(avga(INC.y25))}</td>
-    <td style="color:#F5A623">${eur(avga(INC.y26))}</td>
+    <td style="color:#4B9EFF">${eur(avga(inc.y24))}</td>
+    <td style="color:#00CC88">${eur(avga(inc.y25))}</td>
+    <td style="color:#F5A623">${eur(avga(inc.y26))}</td>
   </tr></tfoot></table>`;
   document.getElementById('ek-tbl').innerHTML=h;
 }
