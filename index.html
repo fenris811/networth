@@ -209,7 +209,7 @@
 
   <!-- ÜBERSICHT -->
   <div id="tab-ub" class="tab-content active">
-    <div class="g3 mb" id="ub-stats"></div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px" id="ub-stats"></div>
     <div class="card mb">
       <div class="slabel">Vermögensverlauf</div>
       <div style="position:relative;height:240px"><canvas id="cMain"></canvas></div>
@@ -415,6 +415,17 @@ let editingId = null; // null = new, string = edit mode
 const eur = v => v == null ? "—" : new Intl.NumberFormat("de-DE",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(v);
 const dlt = v => v == null ? "—" : (v>=0?"+":"")+eur(v);
 const avga = a => { const v=a.filter(Boolean); return v.length?Math.round(v.reduce((s,x)=>s+x,0)/v.length):0; };
+function avgMonthlyGrowth(data) {
+  const deltas = data.filter(d=>d.delta!=null).map(d=>d.delta);
+  if(!deltas.length) return 0;
+  return Math.round(deltas.reduce((s,x)=>s+x,0)/deltas.length);
+}
+function avgMonthlyGrowthLast12(data) {
+  const deltas = data.filter(d=>d.delta!=null).map(d=>d.delta);
+  const last = deltas.slice(-12);
+  if(!last.length) return 0;
+  return Math.round(last.reduce((s,x)=>s+x,0)/last.length);
+}
 
 function calcBudgetRows() {
   const B = BUDGET;
@@ -671,10 +682,32 @@ function rStats(){
   const lat=DATA[DATA.length-1],dec24=DATA.find(d=>d.sk==='2024-12');
   const ytd=dec24?Math.round(lat.g-dec24.g):null;
   const pct=(lat.g/GOAL*100).toFixed(1);
+  const avgAll  = avgMonthlyGrowth(DATA);
+  const avg12   = avgMonthlyGrowthLast12(DATA);
+  const mtsLeft = Math.ceil((GOAL - lat.g) / Math.max(1, avg12));
   document.getElementById('ub-stats').innerHTML=`
     <div class="card"><div class="sc-lbl">Aktuell</div><div class="sc-val">${eur(lat.g)}</div><div class="sc-sub">${lat.m} · Letzter Eintrag</div></div>
     <div class="card"><div class="sc-lbl">Zuwachs YTD</div><div class="sc-val">${dlt(ytd)}</div><div class="sc-sub g">${dec24?`+${((ytd/dec24.g)*100).toFixed(1)}% seit Dez '24`:''}</div></div>
-    <div class="card"><div class="sc-lbl">Ziel 2026</div><div class="sc-val">${eur(GOAL)}</div><div class="sc-sub go">${pct}% · noch ${eur(GOAL-lat.g)}</div></div>`;
+    <div class="card"><div class="sc-lbl">Ziel 2026</div><div class="sc-val">${eur(GOAL)}</div><div class="sc-sub go">${pct}% · noch ${eur(GOAL-lat.g)}</div></div>
+    <div class="card" style="grid-column:span 3">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;text-align:center">
+        <div style="padding:0 20px;border-right:1px solid var(--brd)">
+          <div class="sc-lbl" style="text-align:center">Ø Zuwachs / Monat (gesamt)</div>
+          <div style="font-family:'Syne',sans-serif;font-size:28px;font-weight:700;color:${avgAll>=0?'var(--etf)':'var(--red)'}">${dlt(avgAll)}</div>
+          <div style="font-size:11px;color:var(--mut);margin-top:4px">über alle ${DATA.filter(d=>d.delta!=null).length} Monate</div>
+        </div>
+        <div style="padding:0 20px;border-right:1px solid var(--brd)">
+          <div class="sc-lbl" style="text-align:center">Ø Zuwachs / Monat (letzte 12)</div>
+          <div style="font-family:'Syne',sans-serif;font-size:28px;font-weight:700;color:${avg12>=0?'var(--etf)':'var(--red)'}">${dlt(avg12)}</div>
+          <div style="font-size:11px;color:var(--mut);margin-top:4px">letzten 12 Monate</div>
+        </div>
+        <div style="padding:0 20px">
+          <div class="sc-lbl" style="text-align:center">Hochrechnung bis Ziel</div>
+          <div style="font-family:'Syne',sans-serif;font-size:28px;font-weight:700;color:var(--krypto)">${mtsLeft <= 0 ? 'Erreicht ✓' : mtsLeft + ' Monate'}</div>
+          <div style="font-size:11px;color:var(--mut);margin-top:4px">bei Ø ${eur(avg12)} / Monat</div>
+        </div>
+      </div>
+    </div>`;
 }
 function rHist(){
   let h=`<table class="dtable"><thead><tr>
