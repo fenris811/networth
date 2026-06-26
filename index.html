@@ -487,8 +487,8 @@ function calcBudgetRows() {
 function build() {
   const all = STATIC.map(d=>({...d}));
   UE.forEach(e => {
-    const g = (+e.vr)+(+e.c24)+(+(e.vivid||0))+(+e.aktien)+(+e.krypto)+(+e.bargeld);
-    const row = {m:e.label,sk:e.sk,g,k:(+e.vr)+(+e.c24)+(+(e.vivid||0)),a:+e.aktien,c:+e.krypto,b:+e.bargeld,_u:true,_id:e.id,_raw:e};
+    const g = (+e.vr)+(+e.c24)+(+e.aktien)+(+e.krypto)+(+e.bargeld);
+    const row = {m:e.label,sk:e.sk,g,k:(+e.vr)+(+e.c24),a:+e.aktien,c:+e.krypto,b:+e.bargeld,vivid:+(e.vivid||0),_u:true,_id:e.id,_raw:e};
     const i = all.findIndex(d=>d.sk===e.sk);
     i>=0 ? all[i]=row : all.push(row);
   });
