@@ -300,14 +300,42 @@
 
   <!-- KONTEN -->
   <div id="tab-kt" class="tab-content">
-    <div class="card mb">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px">
-        <div class="slabel" style="margin:0">Vivid Geschäftskonto</div>
-        <span style="font-size:11px;color:var(--mut)">unversteuert · nicht im Nettovermögen</span>
+
+    <!-- VIVID -->
+    <div style="display:grid;grid-template-columns:1fr 340px;gap:12px" class="mb">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px">
+          <div class="slabel" style="margin:0">Vivid Geschäftskonto</div>
+          <span style="font-size:11px;color:var(--mut)">unversteuert · nicht im Nettovermögen</span>
+        </div>
+        <div style="position:relative;height:220px"><canvas id="cVivid"></canvas></div>
+        <div id="vivid-latest" style="margin-top:12px"></div>
       </div>
-      <div style="position:relative;height:200px"><canvas id="cVivid"></canvas></div>
-      <div id="vivid-latest" style="margin-top:12px;display:flex;gap:24px"></div>
+      <div class="card">
+        <div class="slabel">Vivid – Eintrag</div>
+        <div class="fg2">
+          <div class="fg"><label class="flbl">Jahr</label>
+            <select id="vv-year" class="fsel"><option>2024</option><option>2025</option><option selected>2026</option><option>2027</option></select>
+          </div>
+          <div class="fg"><label class="flbl">Monat</label>
+            <select id="vv-month" class="fsel">
+              <option value="01">Jan</option><option value="02">Feb</option><option value="03">Mär</option>
+              <option value="04">Apr</option><option value="05" selected>Mai</option><option value="06">Jun</option>
+              <option value="07">Jul</option><option value="08">Aug</option><option value="09">Sep</option>
+              <option value="10">Okt</option><option value="11">Nov</option><option value="12">Dez</option>
+            </select>
+          </div>
+        </div>
+        <div class="fg"><label class="flbl">Kontostand (€)</label>
+          <input type="number" class="finp" id="vv-amount" placeholder="0">
+        </div>
+        <button class="bg-save-btn" onclick="saveVivid()" style="margin-top:12px">Speichern</button>
+        <p id="vv-save-msg" style="font-size:12px;color:var(--etf);margin-top:8px;min-height:16px"></p>
+        <div id="vv-list" style="margin-top:20px;border-top:1px solid var(--brd);padding-top:16px"></div>
+      </div>
     </div>
+
+    <!-- GEMEINSCHAFTSKONTO -->
     <div style="display:grid;grid-template-columns:1fr 340px;gap:12px">
       <div class="card">
         <div class="slabel">Gemeinschaftskonto Nicole</div>
@@ -315,14 +343,14 @@
         <div id="joint-latest" style="margin-top:12px"></div>
       </div>
       <div class="card">
-        <div class="slabel">Eintrag hinzufügen / bearbeiten</div>
+        <div class="slabel">Gemeinschaftskonto – Eintrag</div>
         <div class="fg2">
           <div class="fg"><label class="flbl">Jahr</label>
             <select id="jt-year" class="fsel"><option>2025</option><option selected>2026</option><option>2027</option></select>
           </div>
           <div class="fg"><label class="flbl">Monat</label>
             <select id="jt-month" class="fsel">
-              <option value="01">Jan</option><option value="02">Feb</option><option value="03">Mar</option>
+              <option value="01">Jan</option><option value="02">Feb</option><option value="03">Mär</option>
               <option value="04">Apr</option><option value="05" selected>Mai</option><option value="06">Jun</option>
               <option value="07">Jul</option><option value="08">Aug</option><option value="09">Sep</option>
               <option value="10">Okt</option><option value="11">Nov</option><option value="12">Dez</option>
@@ -337,6 +365,7 @@
         <div id="jt-list" style="margin-top:20px;border-top:1px solid var(--brd);padding-top:16px"></div>
       </div>
     </div>
+
   </div>
 
   <!-- EINKOMMEN -->
@@ -453,6 +482,7 @@ let INCOME_ENTRIES = []; // {sk, amount} from supabase
 let CUR_INCOME = 3482; // current month nettolohn for waterfall
 let editingId = null;
 let JOINT_ENTRIES = [];
+let VIVID_ENTRIES = [];
 
 // ═══ UTILS ════════════════════════════════════════════
 const eur = v => v == null ? "—" : new Intl.NumberFormat("de-DE",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(v);
@@ -548,6 +578,39 @@ async function loadBudget() {
     msci:+data[0].msci, igm:+data[0].igm, bison:+data[0].bison,
   };
 }
+async function loadVividEntries() {
+  const {data}=await sb.from('vivid_account').select('*').order('sk');
+  if(data) VIVID_ENTRIES=data;
+}
+async function saveVivid() {
+  const yr=document.getElementById('vv-year').value;
+  const mo=document.getElementById('vv-month').value;
+  const amt=parseFloat(document.getElementById('vv-amount').value)||0;
+  const msg=document.getElementById('vv-save-msg');
+  if(!amt){msg.textContent='Bitte Betrag eingeben.';return;}
+  msg.textContent='…';
+  const{error}=await sb.from('vivid_account').upsert({user_id:CURR_USER.id,sk:`${yr}-${mo}`,amount:amt},{onConflict:'user_id,sk'});
+  if(error){msg.style.color='var(--red)';msg.textContent=error.message;return;}
+  msg.style.color='var(--etf)'; msg.textContent='Gespeichert';
+  setTimeout(()=>msg.textContent='',2000);
+  await loadVividEntries();
+  TINIT['kt']=false; initTab('kt',true);
+}
+async function delVivid(id) {
+  if(!confirm('Eintrag löschen?'))return;
+  await sb.from('vivid_account').delete().eq('id',id);
+  await loadVividEntries();
+  TINIT['kt']=false; initTab('kt',true);
+}
+function editVivid(sk,amount) {
+  const[yr,mo]=sk.split('-');
+  document.getElementById('vv-year').value=yr;
+  document.getElementById('vv-month').value=mo;
+  document.getElementById('vv-amount').value=amount;
+  document.getElementById('vv-save-msg').style.color='var(--krypto)';
+  document.getElementById('vv-save-msg').textContent=`Bearbeitung: ${MN[parseInt(mo)-1]} ${yr}`;
+  document.getElementById('vv-amount').focus();
+}
 async function loadJointEntries() {
   const {data} = await sb.from('joint_account').select('*').order('sk');
   if (data) JOINT_ENTRIES = data;
@@ -628,7 +691,7 @@ async function saveIncome() {
 async function loadAndInit() {
   document.getElementById('auth-screen').style.display='none';
   document.getElementById('app').style.display='block';
-  await Promise.all([loadEntries().then(d=>UE=d), loadBudget(), loadIncomeEntries(), loadJointEntries()]);
+  await Promise.all([loadEntries().then(d=>UE=d), loadBudget(), loadIncomeEntries(), loadJointEntries(), loadVividEntries()]);
   DATA=build();
   updHdr();
   Object.keys(TINIT).forEach(k=>delete TINIT[k]);
@@ -902,7 +965,7 @@ function initTab(t,force=true){
   if(t==='vl'){iStacked();rHist();}
   if(t==='bg'){rBg();iBgPie();}
   if(t==='ek'){rEkStats();iInc();rEkTbl();}
-  if(t==='kt'){iVivid();iJoint();rJointList();}
+  if(t==='kt'){iVivid();iJoint();rJointList();rVividList();}
 }
 function refresh(){TINIT[CUR]=false;setTimeout(()=>initTab(CUR),50);updHdr();}
 
@@ -980,11 +1043,11 @@ async function delEntry(id){
 // ═══ STARTUP ══════════════════════════════════════════
 // ═══ KONTEN CHARTS ════════════════════════════════════════
 function iVivid() {
-  const staticVivid = STATIC.filter(d=>+(d.vivid||0)>0).map(d=>({m:d.m,sk:d.sk,v:+(d.vivid||0)}));
-  const userVivid   = UE.filter(e=>+(e.vivid||0)>0).map(e=>({m:e.label,sk:e.sk,v:+(e.vivid||0)}));
-  const vividMap = {};
-  [...staticVivid,...userVivid].forEach(d=>vividMap[d.sk]=d);
-  const vividData = Object.values(vividMap).sort((a,b)=>a.sk.localeCompare(b.sk));
+  // Use dedicated vivid_account table entries
+  const vividData = VIVID_ENTRIES.map(e=>{
+    const[y,m]=e.sk.split('-');
+    return {m:`${MN[parseInt(m)-1]} '${y.slice(2)}`,sk:e.sk,v:+e.amount};
+  });
   const wrap = document.getElementById('cVivid');
   if(!vividData.length) {
     if(wrap) wrap.parentElement.innerHTML='<p style="text-align:center;color:var(--mut);padding:60px 0;font-size:13px">Noch keine Vivid-Daten. Im Verlauf-Tab beim Monatseintrag den Vivid-Betrag eintragen.</p>';
@@ -1028,7 +1091,7 @@ function iJoint() {
 function rJointList() {
   const el=document.getElementById('jt-list');
   if(!JOINT_ENTRIES.length){el.innerHTML='';return;}
-  let h='<p style="font-size:10px;letter-spacing:2px;color:var(--mut);text-transform:uppercase;margin-bottom:10px">Eintraege</p>';
+  let h='<p style="font-size:10px;letter-spacing:2px;color:var(--mut);text-transform:uppercase;margin-bottom:10px">Alle Eintraege</p>';
   [...JOINT_ENTRIES].reverse().forEach(e=>{
     const[y,m]=e.sk.split('-');
     const lbl=`${MN[parseInt(m)-1]} '${y.slice(2)}`;
@@ -1038,6 +1101,25 @@ function rJointList() {
         <span style="font-family:'DM Mono',monospace;font-size:12px">${eur(+e.amount)}</span>
         <button class="icon-btn edit-btn" onclick="editJoint('${e.sk}',${e.amount})" title="Bearbeiten">&#9998;</button>
         <button class="icon-btn del-btn"  onclick="delJoint('${e.id}')" title="Loeschen">&#215;</button>
+      </div>
+    </div>`;
+  });
+  el.innerHTML=h;
+}
+function rVividList() {
+  const el=document.getElementById('vv-list');
+  if(!el) return;
+  if(!VIVID_ENTRIES.length){el.innerHTML='<p style="font-size:11px;color:var(--mut)">Noch keine Eintraege. Gib historische Werte ein um den Verlauf zu sehen.</p>';return;}
+  let h='<p style="font-size:10px;letter-spacing:2px;color:var(--mut);text-transform:uppercase;margin-bottom:10px">Alle Eintraege</p>';
+  [...VIVID_ENTRIES].reverse().forEach(e=>{
+    const[y,m]=e.sk.split('-');
+    const lbl=`${MN[parseInt(m)-1]} '${y.slice(2)}`;
+    h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
+      <span style="font-size:12px;color:var(--mut)">${lbl}</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-family:'DM Mono',monospace;font-size:12px;color:#FF79B0">${eur(+e.amount)}</span>
+        <button class="icon-btn edit-btn" onclick="editVivid('${e.sk}',${e.amount})" title="Bearbeiten">&#9998;</button>
+        <button class="icon-btn del-btn"  onclick="delVivid('${e.id}')" title="Loeschen">&#215;</button>
       </div>
     </div>`;
   });
