@@ -434,8 +434,8 @@ const STATIC = [
   {m:"Sep '25",sk:"2025-09",g:38436,k:16259,a:5564,c:10728,b:5885},
   {m:"Okt '25",sk:"2025-10",g:38569,k:15839,a:5981,c:10864,b:5885},
   {m:"Mär '26",sk:"2026-03",g:39724,k:21049,a:6505,c:7170, b:5000},
-  {m:"Apr '26",sk:"2026-04",g:44334,k:24554,a:7108,c:7672, b:5000},
-  {m:"Mai '26",sk:"2026-05",g:44329,k:24218,a:7422,c:7689, b:5000},
+  {m:"Apr '26",sk:"2026-04",g:41032,k:21252,a:7108,c:7672, b:5000,vivid:3302},
+  {m:"Mai '26",sk:"2026-05",g:40576,k:20465,a:7422,c:7689, b:5000,vivid:3753},
 ];
 const INC = {
   months:MN,
@@ -978,6 +978,72 @@ async function delEntry(id){
 }
 
 // ═══ STARTUP ══════════════════════════════════════════
+// ═══ KONTEN CHARTS ════════════════════════════════════════
+function iVivid() {
+  const staticVivid = STATIC.filter(d=>+(d.vivid||0)>0).map(d=>({m:d.m,sk:d.sk,v:+(d.vivid||0)}));
+  const userVivid   = UE.filter(e=>+(e.vivid||0)>0).map(e=>({m:e.label,sk:e.sk,v:+(e.vivid||0)}));
+  const vividMap = {};
+  [...staticVivid,...userVivid].forEach(d=>vividMap[d.sk]=d);
+  const vividData = Object.values(vividMap).sort((a,b)=>a.sk.localeCompare(b.sk));
+  const wrap = document.getElementById('cVivid');
+  if(!vividData.length) {
+    if(wrap) wrap.parentElement.innerHTML='<p style="text-align:center;color:var(--mut);padding:60px 0;font-size:13px">Noch keine Vivid-Daten. Im Verlauf-Tab beim Monatseintrag den Vivid-Betrag eintragen.</p>';
+    document.getElementById('vivid-latest').innerHTML=''; return;
+  }
+  const lat=vividData[vividData.length-1];
+  document.getElementById('vivid-latest').innerHTML=
+    `<span style="font-size:11px;color:var(--mut)">Aktuell (${lat.m})</span>&nbsp;&nbsp;<span style="font-family:'Syne',sans-serif;font-size:22px;font-weight:700;color:#FF79B0">${eur(lat.v)}</span>`;
+  mkC('cVivid',{type:'line',data:{labels:vividData.map(d=>d.m),datasets:[{label:'Vivid',data:vividData.map(d=>d.v),
+    borderColor:'#FF79B0',
+    backgroundColor:ctx=>{const{ctx:c,chartArea:ca}=ctx.chart;if(!ca)return'transparent';const g=c.createLinearGradient(0,ca.top,0,ca.bottom);g.addColorStop(0,'rgba(255,121,176,0.3)');g.addColorStop(1,'rgba(255,121,176,0.02)');return g;},
+    fill:true,tension:0.4,pointRadius:4,pointBackgroundColor:'#FF79B0',borderWidth:2.5}]},
+  options:{responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:false},tooltip:{...TT,callbacks:{label:c=>`Vivid: ${eur(c.raw)}`}}},
+    scales:{x:{grid:{display:false},ticks:{font:{size:10}}},
+      y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{font:{size:10},callback:v=>`${(v/1000).toFixed(1)}k`}}}}});
+}
+
+function iJoint() {
+  const wrap=document.getElementById('cJoint');
+  if(!JOINT_ENTRIES.length) {
+    if(wrap) wrap.parentElement.innerHTML='<p style="text-align:center;color:var(--mut);padding:60px 0;font-size:13px">Noch keine Eintraege.</p>';
+    document.getElementById('joint-latest').innerHTML=''; return;
+  }
+  const lat=JOINT_ENTRIES[JOINT_ENTRIES.length-1];
+  const[yr,mo]=lat.sk.split('-');
+  document.getElementById('joint-latest').innerHTML=
+    `<span style="font-size:11px;color:var(--mut)">Aktuell (${MN[parseInt(mo)-1]} ${yr})</span><br><span style="font-family:'Syne',sans-serif;font-size:22px;font-weight:700;color:var(--bank)">${eur(lat.amount)}</span>`;
+  mkC('cJoint',{type:'line',data:{
+    labels:JOINT_ENTRIES.map(e=>{const[y,m]=e.sk.split('-');return `${MN[parseInt(m)-1]} '${y.slice(2)}`;}),
+    datasets:[{label:'Gemeinschaftskonto',data:JOINT_ENTRIES.map(e=>+e.amount),
+      borderColor:'#4B9EFF',
+      backgroundColor:ctx=>{const{ctx:c,chartArea:ca}=ctx.chart;if(!ca)return'transparent';const g=c.createLinearGradient(0,ca.top,0,ca.bottom);g.addColorStop(0,'rgba(75,158,255,0.3)');g.addColorStop(1,'rgba(75,158,255,0.02)');return g;},
+      fill:true,tension:0.4,pointRadius:4,pointBackgroundColor:'#4B9EFF',borderWidth:2.5}]},
+  options:{responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:false},tooltip:{...TT,callbacks:{label:c=>`Gemeinschaftskonto: ${eur(c.raw)}`}}},
+    scales:{x:{grid:{display:false},ticks:{font:{size:10}}},
+      y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{font:{size:10},callback:v=>`${(v/1000).toFixed(1)}k`}}}}});
+}
+
+function rJointList() {
+  const el=document.getElementById('jt-list');
+  if(!JOINT_ENTRIES.length){el.innerHTML='';return;}
+  let h='<p style="font-size:10px;letter-spacing:2px;color:var(--mut);text-transform:uppercase;margin-bottom:10px">Eintraege</p>';
+  [...JOINT_ENTRIES].reverse().forEach(e=>{
+    const[y,m]=e.sk.split('-');
+    const lbl=`${MN[parseInt(m)-1]} '${y.slice(2)}`;
+    h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
+      <span style="font-size:12px;color:var(--mut)">${lbl}</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-family:'DM Mono',monospace;font-size:12px">${eur(+e.amount)}</span>
+        <button class="icon-btn edit-btn" onclick="editJoint('${e.sk}',${e.amount})" title="Bearbeiten">&#9998;</button>
+        <button class="icon-btn del-btn"  onclick="delJoint('${e.id}')" title="Loeschen">&#215;</button>
+      </div>
+    </div>`;
+  });
+  el.innerHTML=h;
+}
+
 (async()=>{
   const{data:{session}}=await sb.auth.getSession();
   if(session){CURR_USER=session.user;await loadAndInit();}
